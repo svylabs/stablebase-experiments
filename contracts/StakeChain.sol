@@ -4,7 +4,7 @@ contract StakeChain {
     uint256 public totalStaked;
     address public stakingToken;
 
-    bytes32 public constant NULL_HASH = keccak256(abi.encodePacked(uint256(0)));
+    bytes32 public constant NULL_HASH = bytes32(0x0);
 
     // A chain of stake modifications
     bytes32 public stakeChain = NULL_HASH;
@@ -33,6 +33,7 @@ contract StakeChain {
 
     function stake(uint256 amount) public {
         // Stake the amount
+        // TODO: check the transfer etc..
         totalStaked += amount;
         stakes[msg.sender].totalStake += amount;
 

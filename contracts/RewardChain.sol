@@ -25,6 +25,14 @@ contract RewardChain {
 
     mapping(address => StakeRewardClaim) public rewards;
 
+    event RewardsAdded(
+        uint256 amount,
+        uint256 totalRewards,
+        uint256 timestamp,
+        bytes32 previousRewardChain,
+        bytes32 currentRewardChain
+    );
+
     constructor(bytes32 startOfStakeChain) {
         // Initialize the beginning of the stake chain
         beginningOfStakeChain = startOfStakeChain;
@@ -52,13 +60,24 @@ contract RewardChain {
         }
     }
 
-    function addRewards() public {
+    function addRewards(uint256 amount) public {
         // Should add rewards to the contract
-    }
-
-    function initializeClaimRewards(address user) public {
-        // Should initialize the claim rewards for the user
-        // Should take a snapshot of the current reward chain.
+        totalRewards += amount;
+        bytes memory rewardData = abi.encodePacked(
+            amount,
+            totalRewards,
+            block.timestamp,
+            currentRewardChain
+        );
+        bytes32 previousRewardChain = currentRewardChain;
+        currentRewardChain = keccak256(rewardData);
+        emit RewardsAdded(
+            amount,
+            totalRewards,
+            block.timestamp,
+            previousRewardChain,
+            currentRewardChain
+        );
     }
 
     /**
