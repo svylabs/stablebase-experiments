@@ -111,4 +111,51 @@ describe("RewardChainTest", function () {
       }
     }
   });
+
+
+  it("should add multiple random rewards and validate hashes", async function () {
+    const iterations = 5; // Number of random reward additions
+    let totalRewards = ethers.parseEther("0");
+    let previousRewardChain = ethers.ZeroHash;
+  
+    for (let i = 0; i < iterations; i++) {
+      // Generate a random reward amount
+      const rewardAmount = ethers.parseEther((Math.random() * 100).toFixed(2)); // Up to 100 tokens
+  
+      console.log(`Iteration ${i + 1}: Adding reward of ${ethers.formatEther(rewardAmount)} tokens`);
+  
+      // Add rewards to the contract
+      const tx = await rewardChain.addRewards(rewardAmount);
+      const receipt = await tx.wait();
+  
+      let currentRewardChain;
+      let timestamp;
+  
+      for (const log of receipt.logs) {
+        const parsedLog = rewardChain.interface.parseLog(log);
+        if (parsedLog.name === "RewardsAdded") {
+          console.log("RewardsAdded Event Parameters:", Object.values(parsedLog.args).slice(0, -1));
+          currentRewardChain = parsedLog.args.currentRewardChain;
+          timestamp = parsedLog.args.timestamp;
+        }
+      }
+  
+      // Update total rewards
+      totalRewards = totalRewards + rewardAmount;
+  
+      // Compute expected reward chain hash
+      const expectedRewardChain = solidityPackHash(
+        ["uint256", "uint256", "uint256", "bytes32"],
+        [rewardAmount, totalRewards, timestamp, previousRewardChain]
+      );
+  
+      // Validate the state of the contract
+      expect(await rewardChain.totalRewards()).to.equal(totalRewards);
+      expect(await rewardChain.currentRewardChain()).to.equal(expectedRewardChain);
+  
+      // Update for the next iteration
+      previousRewardChain = currentRewardChain;
+    }
+  });
+  
 });
