@@ -14,6 +14,8 @@ contract RewardChain {
         bytes32 currentStakeChainSnapshot;
         bytes32 previousRewardChainSnapshot;
         bytes32 currentRewardChainSnapshot;
+        bytes32 userPreviousStakeChainSnapshot;
+        bytes32 userLatestStakeChainSnapshot;
         bool claimed;
     }
 
@@ -38,7 +40,11 @@ contract RewardChain {
         beginningOfStakeChain = startOfStakeChain;
     }
 
-    function relay(address user, bytes32 currentStakeChainSnapshot) external {
+    function relay(
+        address user,
+        bytes32 userStakeChainSnapshot,
+        bytes32 currentStakeChainSnapshot
+    ) external {
         // Should relay the stakeChainSnapshot and currentStakeChainSnapshot
         StakeRewardClaim storage claim = rewards[user];
         if (claim.previousStakeChainSnapshot == bytes32(0x0)) {
@@ -46,6 +52,8 @@ contract RewardChain {
             claim.currentStakeChainSnapshot = currentStakeChainSnapshot;
             claim.previousRewardChainSnapshot = NULL_HASH;
             claim.currentRewardChainSnapshot = currentRewardChain;
+            claim.userPreviousStakeChainSnapshot = NULL_HASH;
+            claim.userLatestStakeChainSnapshot = userStakeChainSnapshot;
         } else {
             require(
                 claim.claimed,
@@ -57,6 +65,9 @@ contract RewardChain {
             claim.previousRewardChainSnapshot = claim
                 .currentRewardChainSnapshot;
             claim.currentRewardChainSnapshot = currentRewardChain;
+            claim.userPreviousStakeChainSnapshot = claim
+                .userLatestStakeChainSnapshot;
+            claim.userLatestStakeChainSnapshot = userStakeChainSnapshot;
         }
     }
 
@@ -92,6 +103,8 @@ contract RewardChain {
      */
     function claimRewards(
         uint256 aggregateRewards,
+        uint256 totalUserStake,
+        uint256 totalStake,
         bytes calldata proof
     ) public {
         // Should verify proof and return the rewards
