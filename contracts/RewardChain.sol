@@ -17,7 +17,7 @@ contract RewardChain {
         bool claimed;
     }
 
-    bytes32 public NULL_HASH = keccak256(abi.encodePacked(uint256(0)));
+    bytes32 public NULL_HASH = bytes32(0x0);
     bytes32 public beginningOfStakeChain = NULL_HASH;
     bytes32 public currentRewardChain = NULL_HASH;
 
