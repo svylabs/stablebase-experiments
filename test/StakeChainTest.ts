@@ -1,5 +1,6 @@
 import { ethers } from "hardhat";
 import { expect } from "chai";
+import { time } from '@nomicfoundation/hardhat-network-helpers';
 
 function solidityPackHash(types: string[], values: any[]) {
   const packed = ethers.solidityPacked(types, values);
@@ -142,4 +143,116 @@ describe("StakeChain", function () {
     const { stakeChainSnapshot } = await stakeChain.stakeSnapshot(owner.address);
     expect(stakeChainSnapshot).to.equal(secondStakeChain);
   });
+
+
+  it("should stake and unstake randomly, checking hashes and logging event parameters", async function () {
+    const [own, ...usrs] = await ethers.getSigners();
+    const iterations = 100;
+    const maxStakeAmount = ethers.parseEther("100");
+    let lastStakeChainHash = ethers.ZeroHash;
+
+    const balances: any = {};
+
+    for (let i = 0;i<usrs.length;i++) {
+        const tx = await stakingToken.connect(owner).transfer(usrs[i].address, ethers.parseEther("1000"));
+        await tx.wait();
+        balances[usrs[i].address] = {
+            balance: ethers.parseEther("1000"),
+            staked: ethers.parseEther("0")
+        };
+    }
+
+
+  
+    for (let i = 0; i < iterations; i++) {
+      const userId = Math.floor((Math.random() * 1000)) % usrs.length;
+      let isStake = Math.random() > 0.5; // Randomly decide to stake or unstake
+      const amount = ethers.parseEther((Math.random() * 10).toFixed(2)); // Random amount (up to 10)
+
+      if (!isStake && (balances[usrs[userId].address].staked - amount) <= BigInt(0)) {
+        isStake = true; // If no stake, stake instead
+      }
+      if (isStake && (balances[usrs[userId].address].balance - amount) <= BigInt(0)) {
+        isStake = false; // If no balance, unstake instead
+      }
+      
+
+      time.increase(60 * 60 * 24 * 7); // Increase time by 1 week
+  
+      // Get current user snapshot
+      const userSnapshot = await stakeChain.stakeSnapshot(usrs[userId].address);
+  
+      if (isStake) {
+        console.log(`Iteration ${i + 1}: ${usrs[userId].address}, ${balances[usrs[userId].address].balance}, ${balances[usrs[userId].address].staked}, Staking ${ethers.formatEther(amount)} tokens, ${amount}`);
+        const tx = await stakeChain.connect(usrs[userId]).stake(amount);
+        const receipt = await tx.wait();
+  
+        // Log the StakeChainExtended event parameters
+        for (const log of receipt.logs) {
+          const parsedLog = stakeChain.interface.parseLog(log);
+          if (parsedLog.name === "StakeChainExtended") {
+            console.log("StakeChainExtended Event Parameters:", Object.values(parsedLog.args));
+          }
+        }
+  
+        // Validate the hash
+        const totalStaked = await stakeChain.totalStaked();
+        const newUserSnapshot = await stakeChain.stakeSnapshot(usrs[userId].address);
+  
+        const stakeTimestamp = receipt.logs
+          .map((log: any) => stakeChain.interface.parseLog(log))
+          .find((parsedLog: any) => parsedLog.name === "StakeChainExtended").args.timestamp;
+        console.log(stakeTimestamp);
+  
+        const expectedHash = solidityPackHash(
+          ["address", "bool", "uint256", "uint256", "uint256", "uint256", "bytes32"],
+          [usrs[userId].address, true, amount, totalStaked, newUserSnapshot[0], stakeTimestamp, lastStakeChainHash]
+        );
+  
+        expect(newUserSnapshot[2]).to.equal(expectedHash);
+        lastStakeChainHash = newUserSnapshot[2];
+        balances[usrs[userId].address].balance -= amount;
+        balances[usrs[userId].address].staked += amount;
+      } else {
+        console.log(`Iteration ${i + 1}:  ${usrs[userId].address}, ${balances[usrs[userId].address].balance}, ${balances[usrs[userId].address].staked}, Unstaking ${ethers.formatEther(amount)} tokens ${amount}`);
+        const totalStake = userSnapshot[0];
+        if (amount > totalStake) {
+          console.log("Not enough stake to unstake, skipping...");
+          continue;
+        }
+  
+        const tx = await stakeChain.connect(usrs[userId]).unstake(amount);
+        const receipt = await tx.wait();
+  
+        // Log the StakeChainExtended event parameters
+        for (const log of receipt.logs) {
+          const parsedLog = stakeChain.interface.parseLog(log);
+          if (parsedLog.name === "StakeChainExtended") {
+            console.log("StakeChainExtended Event Parameters:", Object.values(parsedLog.args));
+          }
+        }
+  
+        // Validate the hash
+        const totalStaked = await stakeChain.totalStaked();
+        const newUserSnapshot = await stakeChain.stakeSnapshot(usrs[userId].address);
+  
+        const unstakeTimestamp = receipt.logs
+          .map((log: any) => stakeChain.interface.parseLog(log))
+          .find((parsedLog: any) => parsedLog.name === "StakeChainExtended").args.timestamp;
+  
+        const expectedHash = solidityPackHash(
+          ["address", "bool", "uint256", "uint256", "uint256", "uint256", "bytes32"],
+          [usrs[userId].address, false, amount, totalStaked, newUserSnapshot[0], unstakeTimestamp, lastStakeChainHash]
+        );
+  
+        expect(newUserSnapshot[2]).to.equal(expectedHash);
+        lastStakeChainHash = newUserSnapshot[2];
+        balances[usrs[userId].address].balance += amount;
+        balances[usrs[userId].address].staked -= amount;
+      }
+  
+      console.log(`Current StakeChain Hash: ${lastStakeChainHash}`);
+    }
+  });
+  
 });
